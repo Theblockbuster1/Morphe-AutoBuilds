@@ -26,7 +26,7 @@
   },
   {
     "app_name": "instagram",
-    "source": "piko-dev+brosssh-dev",
+    "source": "piko-dev+brosssh",
     "arches": ["arm64-v8a"]
   },
   {
