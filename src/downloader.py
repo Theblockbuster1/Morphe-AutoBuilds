@@ -67,7 +67,7 @@ def download_required(source: str) -> tuple[list[Path], str]:
             # Keep the existing Morphe-specific asset filtering.
             if "morphe-patches" in entry_name or "morphe-cli" in entry_name:
                 if asset_name.endswith(".mpp") or (
-                    "morphe-cli" in asset_name and asset_name.endswith(".jar")
+                    asset_name.lower().endswith(".jar")
                 ):
                     downloaded_files.append(download_resource(asset_url))
             else:
@@ -175,9 +175,11 @@ def download_platform(
         with config_path.open() as json_file:
             config = json.load(json_file)
         
-        # Override arch if specified
-        if arch:
+        # Override arch only if explicitly specified non-universal, or if config has no arch set
+        if arch and arch != "universal":
             config['arch'] = arch
+        elif 'arch' not in config or not config['arch']:
+            config['arch'] = arch or "universal"
 
         platform_module = globals()[platform]
 
