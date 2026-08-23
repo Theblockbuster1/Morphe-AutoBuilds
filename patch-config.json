@@ -9,6 +9,6 @@
     { "app_name": "soundcloud", "source": "Hoo" },
     { "app_name": "prime-video", "source": "Hoo" },
     { "app_name": "proton-vpn", "source": "Hoo" },
-    { "app_name": "x", "sources": ["piko-dev", "shim"], "build_name": "twitter-piko-shim" }
+    { "app_name": "x", "sources": ["piko-dev"], "build_name": "twitter-piko" }
   ]
 }

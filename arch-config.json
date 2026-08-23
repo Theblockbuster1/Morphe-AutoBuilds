@@ -46,7 +46,7 @@
   },
   {
     "app_name": "x",
-    "source": "piko-dev+shim",
+    "source": "piko-dev",
     "arches": ["arm64-v8a"]
   }
 ]
