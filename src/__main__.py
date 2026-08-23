@@ -66,32 +66,46 @@ def resolve_build_label(app_name: str, source_key: str, default_name: str) -> st
 
     return default_name
 
-def _load_patch_rules(app_name: str, src: str) -> tuple[list[str], list[str]]:
-    """Load -d/-e flag pairs from patches/{app_name}-{src}.txt for one source."""
+def _load_patch_rules(app_name: str, src: str) -> tuple[list[str], list[str], list[str]]:
+    """Load -d/-e/++e flag pairs from patches/{app_name}-{src}.txt for one source.
+
+    Lines starting with:
+      -  -> exclude (-d)
+      +  -> include (-e)
+      ++ -> force include (-e with --force flag)
+      -- -> optional force exclude (-d, rarely useful)
+    """
     exclude: list[str] = []
     include: list[str] = []
+    force_include: list[str] = []
     patches_path = Path("patches") / f"{app_name}-{src}.txt"
     if not patches_path.exists():
-        return exclude, include
+        return exclude, include, force_include
     with patches_path.open(encoding="utf-8") as patches_file:
         for line in patches_file:
             line = line.strip()
-            if line.startswith("-"):
+            if line.startswith("--"):  # Optional: force exclude
+                exclude.extend(["-d", line[2:].strip()])
+                # Note: Force exclude may not be useful if patch isn't compatible
+            elif line.startswith("-"):
                 exclude.extend(["-d", line[1:].strip()])
+            elif line.startswith("++"):
+                force_include.extend(["-e", line[2:].strip()])
             elif line.startswith("+"):
                 include.extend(["-e", line[1:].strip()])
-    return exclude, include
+    return exclude, include, force_include
 
 def _morphe_interleaved_patch_args(
     sources: list[str], patch_files: list[Path], app_name: str
 ) -> list[str]:
-    """Build Morphe patch args with per-bundle -e/-d scoped to each --patches."""
+    """Build Morphe patch args with per-bundle -e/-d/++e scoped to each --patches."""
     args: list[str] = []
     for src, patch_file in zip(sources, patch_files):
         args.extend(["--patches", str(patch_file)])
-        exclude, include = _load_patch_rules(app_name, src)
+        exclude, include, force_include = _load_patch_rules(app_name, src)
         args.extend(exclude)
         args.extend(include)
+        args.extend(force_include)
     return args
 
 def run_build(app_name: str, source: str, arch: str = "universal") -> str:
@@ -211,11 +225,13 @@ def run_build(app_name: str, source: str, arch: str = "universal") -> str:
 
     exclude_patches = []
     include_patches = []
+    force_include_patches = []
 
     for src in sources:
-        exclude, include = _load_patch_rules(app_name, src)
+        exclude, include, force_include = _load_patch_rules(app_name, src)
         exclude_patches.extend(exclude)
         include_patches.extend(include)
+        force_include_patches.extend(force_include)
 
     morphe_patch_args = (
         _morphe_interleaved_patch_args(sources, patch_files, app_name)
@@ -328,8 +344,11 @@ def run_build(app_name: str, source: str, arch: str = "universal") -> str:
                     morphe_cmd = [
                         "java", "-jar", str(cli),
                         "patch", *morphe_patch_args,
-                        "--out", str(output_apk), str(input_apk),
                     ]
+                    # Add force flag if we have force patches
+                    if force_include_patches:
+                        morphe_cmd.append("--force")
+                    morphe_cmd.extend(["--out", str(output_apk), str(input_apk)])
                     utils.run_process(morphe_cmd, capture=True, stream=True)
                 except subprocess.CalledProcessError as e:
                     patch_error = e
@@ -337,9 +356,11 @@ def run_build(app_name: str, source: str, arch: str = "universal") -> str:
                     morphe_cmd = [
                         "java", "-jar", str(cli),
                         *morphe_patch_args,
-                        "--input", str(input_apk),
-                        "--output", str(output_apk),
                     ]
+                    # Add force flag if we have force patches
+                    if force_include_patches:
+                        morphe_cmd.append("--force")
+                    morphe_cmd.extend(["--input", str(input_apk), "--output", str(output_apk)])
                     try:
                         utils.run_process(morphe_cmd, capture=True, stream=True)
                     except subprocess.CalledProcessError as e2:
@@ -355,19 +376,27 @@ def run_build(app_name: str, source: str, arch: str = "universal") -> str:
                 )
 
                 if is_revanced_v6_or_newer:
-                    utils.run_process([
+                    revanced_cmd = [
                         "java", "-jar", str(cli),
                         "patch", "-p", str(patch_files[0]), "-b",
                         "--out", str(output_apk), str(input_apk),
-                        *exclude_patches, *include_patches
-                    ], capture=True, stream=True)
+                    ]
+                    # Add force flag if we have force patches
+                    if force_include_patches:
+                        revanced_cmd.append("--force")
+                    revanced_cmd.extend([*exclude_patches, *include_patches])
+                    utils.run_process(revanced_cmd, capture=True, stream=True)
                 else:
-                    utils.run_process([
+                    revanced_cmd = [
                         "java", "-jar", str(cli),
                         "patch", "--patches", str(patch_files[0]),
                         "--out", str(output_apk), str(input_apk),
-                        *exclude_patches, *include_patches
-                    ], capture=True, stream=True)
+                    ]
+                    # Add force flag if we have force patches
+                    if force_include_patches:
+                        revanced_cmd.append("--force")
+                    revanced_cmd.extend([*exclude_patches, *include_patches])
+                    utils.run_process(revanced_cmd, capture=True, stream=True)
 
         except subprocess.CalledProcessError as e:
             # Remove temp input apk; we'll re-download if retrying.

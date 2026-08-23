@@ -1,5 +1,5 @@
 + Bypass signature check
-+ Hide feed content
+++ Hide feed content
 - Clone
 - Disable Reels scrolling
 - Disable story auto flipping
