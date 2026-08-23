@@ -88,6 +88,48 @@ def find_file(files: list[Path], prefix: str = None, suffix: str = None, contain
     
     return None
 
+def find_files(files: list[Path], prefix: str = None, suffix: str = None, contains: str = None, exclude: list = None) -> list[Path]:
+    """Find all files matching the given criteria."""
+    if exclude is None:
+        exclude = []
+
+    matches: list[Path] = []
+    for file in files:
+        if any(excl.lower() in file.name.lower() for excl in exclude):
+            continue
+        if prefix and not file.name.startswith(prefix):
+            continue
+        if suffix and not file.name.endswith(suffix):
+            continue
+        if contains and contains.lower() not in file.name.lower():
+            continue
+        matches.append(file)
+
+    if matches or not exclude:
+        return matches
+
+    for file in files:
+        if prefix and not file.name.startswith(prefix):
+            continue
+        if suffix and not file.name.endswith(suffix):
+            continue
+        if contains and contains.lower() not in file.name.lower():
+            continue
+        matches.append(file)
+
+    return matches
+
+def _patches_paths(patches: str | list[str]) -> list[str]:
+    if isinstance(patches, list):
+        return patches
+    return [patches]
+
+def _morphe_patches_args(patches: str | list[str]) -> list[str]:
+    args: list[str] = []
+    for path in _patches_paths(patches):
+        args.extend(["--patches", path])
+    return args
+
 def find_apksigner() -> str | None:
     on_path = shutil.which("apksigner")
     if on_path:
@@ -194,11 +236,13 @@ def get_highest_version(versions: list[str]) -> str | None:
             highest_version = v
     return highest_version
 
-def get_supported_versions(package_name: str, cli: str, patches: str) -> list[str]:
+def get_supported_versions(package_name: str, cli: str, patches: str | list[str]) -> list[str]:
     # Morphe CLI and ReVanced CLI have different list-versions syntax
     cli_name = Path(cli).name.lower()
     is_morphe_cli = 'morphe' in cli_name
     is_revanced_v6_or_newer = 'revanced-cli-6' in cli_name or 'revanced-cli-7' in cli_name or 'revanced-cli-8' in cli_name
+    patch_paths = _patches_paths(patches)
+    primary_patch = patch_paths[0]
 
     if is_morphe_cli:
         # Morphe CLI docs officially describe `list-patches --with-packages --with-versions`
@@ -211,13 +255,13 @@ def get_supported_versions(package_name: str, cli: str, patches: str) -> list[st
             'java', '-jar', cli,
             'list-versions',
             '-f', package_name,
-            '--patches', patches
+            *_morphe_patches_args(patches),
         ]
     elif is_revanced_v6_or_newer:
         cmd = [
             'java', '-jar', cli,
             'list-versions',
-            '-p', patches, '-b',
+            '-p', primary_patch, '-b',
             '-f', package_name
         ]
     else:
@@ -226,7 +270,7 @@ def get_supported_versions(package_name: str, cli: str, patches: str) -> list[st
             'java', '-jar', cli,
             'list-versions',
             '-f', package_name,
-            patches
+            primary_patch
         ]
 
     # We want the raw output even if the CLI returns a non-zero exit code (bad
@@ -276,7 +320,7 @@ def get_supported_versions(package_name: str, cli: str, patches: str) -> list[st
                 "list-patches",
                 "--with-packages",
                 "--with-versions",
-                patches,
+                *_morphe_patches_args(patches),
             ]
             alt_out = run_process(alt_cmd, capture=True, silent=True, check=False) or ""
             derived: list[str] = []
