@@ -1,0 +1,3 @@
+- Pick the app icon
++ Pure black dark mode
++ View DM photos and videos anonymously
